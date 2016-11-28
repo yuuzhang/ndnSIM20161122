@@ -76,8 +76,7 @@ main(int argc, char* argv[])
   ndnHelper.InstallAll();
 
   // Choosing forwarding strategy
-  // 策略的说明在 fw.rst中
-  ndn::StrategyChoiceHelper::InstallAll("/prefix", "/localhost/nfd/strategy/multicast");
+  ndn::StrategyChoiceHelper::InstallAll("/prefix", "/localhost/nfd/strategy/ncc");
 
   // Installing global routing interface on all nodes
   // ndn::CbisGlobalRoutingHelper ndnGlobalRoutingHelper;
