@@ -25,93 +25,125 @@
 #include "ns3/point-to-point-layout-module.h"
 #include "ns3/ndnSIM-module.h"
 
+//2016-12-7
+#include <boost/lexical_cast.hpp>
+#include <boost/lambda/lambda.hpp>
+#include <boost/lambda/bind.hpp>
+
 namespace ns3 {
 
 /**
- * This scenario simulates a grid topology (using PointToPointGrid module)
- *
- * (consumer) -- ( ) ----- ( )
- *     |          |         |
- *    ( ) ------ ( ) ----- ( )
- *     |          |         |
- *    ( ) ------ ( ) -- (producer)(2,2)
- *
- * All links are 1Mbps with propagation 10ms delay.
- *
- * FIB is populated using NdnGlobalRoutingHelper.
- *
- * Consumer requests data from producer with frequency 100 interests per second
- * (interests contain constantly increasing sequence number).
- *
- * For every received interest, producer replies with a data packet, containing
- * 1024 bytes of virtual payload.
- *
- * To run scenario and see what is happening, use the following command:
- *
- *     NS_LOG=ndn.Consumer:ndn.ConsumerZipfMandelbrot:ndn.Producer ./waf --run=ndn-zipf-mandelbrot
+
  */
 
 int
 main(int argc, char* argv[])
 {
-  // LogComponentEnable("ndn.CbisGlobalRoutingHelper", LOG_LEVEL_INFO);
-  // Setting default parameters for PointToPoint links and channels
-  Config::SetDefault("ns3::PointToPointNetDevice::DataRate", StringValue("1Mbps"));
-  Config::SetDefault("ns3::PointToPointChannel::Delay", StringValue("1ms"));
-  Config::SetDefault("ns3::DropTailQueue::MaxPackets", StringValue("10"));
+	bool manualAssign=false;
+	int InterestsPerSec=200;
+	int simulationSpan=50;
+	string routingName="MultiPath";
 
-  // Read optional command-line parameters (e.g., enable visualizer with ./waf --run=<> --visualize
-  CommandLine cmd;
-  cmd.Parse(argc, argv);
+	CommandLine cmd;
+	cmd.AddValue("InterestsPerSec","Interests emit by consumer per second",InterestsPerSec);
+	cmd.AddValue("simulationSpan","Simulation span time by seconds",simulationSpan);
+	cmd.AddValue ("routingName", "could be Flooding, BestRoute, MultiPath, MultiPathPairFirst", routingName);
+	// Read optional command-line parameters (e.g., enable visualizer with ./waf --run=<> --visualize
+	cmd.Parse(argc,argv);
+	std::cout << "routingName: " << routingName << "   " << InterestsPerSec << " " << simulationSpan << std::endl;
 
-  // Creating 3x3 topology
-  PointToPointHelper p2p;
-  PointToPointGridHelper grid(3, 3, p2p);
-  grid.BoundingBox(100, 100, 200, 200);
+	// LogComponentEnable("ndn.CbisGlobalRoutingHelper", LOG_LEVEL_INFO);
+	// Setting default parameters for PointToPoint links and channels
+	Config::SetDefault("ns3::PointToPointNetDevice::DataRate", StringValue("1Mbps"));
+	Config::SetDefault("ns3::PointToPointChannel::Delay", StringValue("1ms"));
+	Config::SetDefault("ns3::DropTailQueue::MaxPackets", StringValue("10"));
 
-  // Install CCNx stack on all nodes
-  ndn::StackHelper ndnHelper;
-  // ndnHelper.SetForwardingStrategy ("ns3::ndn::fw::SmartFlooding");
-  // ndnHelper.SetContentStore ("ns3::ndn::cs::Lru", "MaxSize", "10");
-  ndnHelper.InstallAll();
+	AnnotatedTopologyReader topologyReader ("", 20);
 
-  // Choosing forwarding strategy
-  ndn::StrategyChoiceHelper::InstallAll("/prefix", "/localhost/nfd/strategy/ncc");
+	topologyReader.SetFileName ("src/ndnSIM/examples/topologies/topo-for-CompareMultiPath.txt");
+	//topologyReader.SetFileName ("src/ndnSIM/examples/topologies/topo-6-node.txt");
 
-  // Installing global routing interface on all nodes
-  // ndn::CbisGlobalRoutingHelper ndnGlobalRoutingHelper;
-  ndn::GlobalRoutingHelper ndnGlobalRoutingHelper;
-  ndnGlobalRoutingHelper.InstallAll();
+	topologyReader.Read ();
+	int nodesNumber=topologyReader.GetNodes().size();
 
-  // Getting containers for the consumer/producer
-  Ptr<Node> producer = grid.GetNode(2, 2);
-  NodeContainer consumerNodes;
-  consumerNodes.Add(grid.GetNode(0, 0));
+	// Install CCNx stack on all nodes
+	ndn::StackHelper ndnHelper;
+	  // Install NDN stack on all nodes
+	  ndnHelper.SetOldContentStore("ns3::ndn::cs::Lru", "MaxSize",
+	                               "100"); // default ContentStore parameters
+	// ndnHelper.SetForwardingStrategy ("ns3::ndn::fw::SmartFlooding");
+	// ndnHelper.SetContentStore ("ns3::ndn::cs::Lru", "MaxSize", "10");
+	ndnHelper.InstallAll();
 
-  // Install CCNx applications
-  std::string prefix = "/prefix";
+	// Choosing forwarding strategy
+	ndn::StrategyChoiceHelper::InstallAll("/prefix", "/localhost/nfd/strategy/ncc");
+	//ndn::StrategyChoiceHelper::InstallAll("/prefix", "/localhost/nfd/strategy/best-route");
 
-  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerZipfMandelbrot");
-  // ndn::AppHelper consumerHelper ("ns3::ndn::ConsumerCbr");
-  consumerHelper.SetPrefix(prefix);
-  consumerHelper.SetAttribute("Frequency", StringValue("100"));        // 100 interests a second
-  consumerHelper.SetAttribute("NumberOfContents", StringValue("100")); // 10 different contents
-  // consumerHelper.SetAttribute ("Randomize", StringValue ("uniform")); // 100 interests a second
-  consumerHelper.Install(consumerNodes);
+	// Installing global routing interface on all nodes
+	// ndn::CbisGlobalRoutingHelper ndnGlobalRoutingHelper;
+	ndn::GlobalRoutingHelper ndnGlobalRoutingHelper;
+	ndnGlobalRoutingHelper.InstallAll();
 
-  ndn::AppHelper producerHelper("ns3::ndn::Producer");
-  producerHelper.SetPrefix(prefix);
-  producerHelper.SetAttribute("PayloadSize", StringValue("100"));
-  producerHelper.Install(producer);
-  ndnGlobalRoutingHelper.AddOrigins(prefix, producer);
+	// Getting containers for the consumer/producer
+	NodeContainer consumerNodes;
+	consumerNodes.Add(Names::Find<Node>("Node0"));
+	Ptr<Node> producer = Names::Find<Node>("Node4");
 
-  // Calculate and install FIBs
-  ndn::GlobalRoutingHelper::CalculateRoutes();
+	// Getting containers for the consumer/producer
+//	Ptr<Node> consumers[4] = {Names::Find<Node>("leaf-1"), Names::Find<Node>("leaf-2"),
+//							Names::Find<Node>("leaf-3"), Names::Find<Node>("leaf-4")};
+//	Ptr<Node> producer = Names::Find<Node>("root");
+//
+//	for (int i = 0; i < 4; i++) {
+//	ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
+//	consumerHelper.SetAttribute("Frequency", StringValue("10")); // 100 interests a second
+//
+//	// Each consumer will express the same data /root/<seq-no>
+//	consumerHelper.SetPrefix("/root");
+//	ApplicationContainer app = consumerHelper.Install(consumers[i]);
+//	app.Start(Seconds(0.01 * i));
+//	}
 
-  Simulator::Stop(Seconds(1.0));
+	// Install CCNx applications
+	std::string prefix = "/prefix";
 
-  Simulator::Run();
-  Simulator::Destroy();
+	ndn::AppHelper consumerHelper("ns3::ndn::ConsumerZipfMandelbrot");
+	// ndn::AppHelper consumerHelper ("ns3::ndn::ConsumerCbr");
+	consumerHelper.SetPrefix(prefix);
+	consumerHelper.SetAttribute("Frequency", StringValue (boost::lexical_cast<std::string>(InterestsPerSec)));        // 100 interests a second
+	consumerHelper.SetAttribute("NumberOfContents", StringValue("100")); // 10 different contents
+	// consumerHelper.SetAttribute ("Randomize", StringValue ("uniform")); // 100 interests a second
+	ApplicationContainer app = consumerHelper.Install(consumerNodes);
+	app.Start(Seconds(0.00 ));
+
+	ndn::AppHelper producerHelper("ns3::ndn::Producer");
+	producerHelper.SetPrefix(prefix);
+	producerHelper.SetAttribute("PayloadSize", StringValue("100"));
+	producerHelper.Install(producer);
+	ndnGlobalRoutingHelper.AddOrigins(prefix, producer);
+
+    //Calculate and install FIBs
+	if(routingName.compare("BestRoute")==0){
+	  ndn::GlobalRoutingHelper::CalculateRoutes ();
+	}
+	else if(routingName.compare("MultiPath")==0){
+		ndn::GlobalRoutingHelper::CalculateNoCommLinkMultiPathRoutesPairFirst();
+	}
+	else if(routingName.compare("Flooding")==0){
+		ndn::GlobalRoutingHelper::CalculateAllPossibleRoutes();
+	}
+
+	Simulator::Stop (Seconds (simulationSpan));
+	//ZhangYu Add the trace，不愿意文件名称还有大小写的区别，所以把 routingName 全部转为小写
+	std::transform(routingName.begin(), routingName.end(), routingName.begin(), ::tolower);
+	string filename=routingName+"-"+boost::lexical_cast<std::string>(InterestsPerSec)+".txt";
+	ndn::CsTracer::InstallAll ("cs-trace-"+filename, Seconds (1));
+	ndn::L3RateTracer::InstallAll ("rate-trace-"+filename, Seconds (1));
+	ndn::AppDelayTracer::InstallAll ("app-delays-trace-"+filename);
+	L2RateTracer::InstallAll ("drop-trace-"+filename, Seconds (1));
+
+	Simulator::Run();
+	Simulator::Destroy();
 
   return 0;
 }
