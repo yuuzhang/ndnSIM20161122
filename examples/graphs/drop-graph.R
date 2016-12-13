@@ -28,3 +28,4 @@ g.all <- ggplot(data, aes(x=Time, y=Kilobits, color=Type)) +
 png("src/ndnSIM/docs/source/_static/l2-rate-tracer.png", width=800, height=500)
 print(g.all)
 x = dev.off()
+print(g.all)

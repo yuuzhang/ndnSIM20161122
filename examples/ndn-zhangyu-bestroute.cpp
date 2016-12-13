@@ -70,8 +70,8 @@ main (int argc, char *argv[])
 	//----------------仿真拓扑----------------
 	AnnotatedTopologyReader topologyReader ("", 20);
 	//topologyReader.SetFileName ("src/ndnSIM/examples/topologies/26node-result-1.txt");
-	//topologyReader.SetFileName ("src/ndnSIM/examples/topologies/topo-for-CompareMultiPath.txt");
-	topologyReader.SetFileName ("src/ndnSIM/examples/topologies/topo-for-xujun.txt");
+	topologyReader.SetFileName ("src/ndnSIM/examples/topologies/topo-for-CompareMultiPath.txt");
+	//topologyReader.SetFileName ("src/ndnSIM/examples/topologies/topo-6-node.txt");
 	topologyReader.Read ();
 	int nodesNumber=topologyReader.GetNodes().size();
 
@@ -158,7 +158,7 @@ main (int argc, char *argv[])
 	//ndn::L3RateTracer::InstallAll ("rate-trace-"+filename, Seconds (1));
 	ndn::L3RateTracer::InstallAll ("rate-trace.txt", Seconds (1));
 	//ndn::AppDelayTracer::InstallAll ("app-delays-trace-"+filename);
-	L2RateTracer::InstallAll ("drop-trace.txt", Seconds (1));
+	//L2RateTracer::InstallAll ("drop-trace-"+filename, Seconds (1));
 
 	Simulator::Run ();
 	Simulator::Destroy ();
